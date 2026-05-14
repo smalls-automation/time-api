@@ -1,0 +1,54 @@
+version: 1
+
+# Auto-merge configuration
+# Trivial changes within these thresholds are automatically merged without human review.
+auto_merge:
+  enabled: true
+  max_files_changed: 10
+  max_lines_changed: 200
+  # If non-empty, only files matching these globs are eligible for auto-merge.
+  # Leave empty to allow any file (subject to escalation rules below).
+  allowed_patterns: []
+
+# Escalation rules — any match sends the PR to human review
+escalate:
+  always_escalate_patterns:
+    - "**/Dockerfile"
+    - "**/docker-compose*.yml"
+    - "**/.github/**"
+    - "**/terraform/**"
+    - "**/infrastructure/**"
+    - "**/*Migration*.cs"
+    - "**/auth/**"
+    - "**/security/**"
+  # Escalate if changes span more than this many top-level directories
+  max_directories: 3
+  # Escalate if any review finding exceeds this confidence threshold
+  min_finding_confidence: 0.85
+
+# Semantic review — LLM-based analysis for business logic changes
+# The LLM checks for semantically significant changes that structural rules miss.
+semantic_review:
+  enabled: true
+  escalation_hints:
+    # Add domain-specific concerns here. The LLM will flag changes related to these topics.
+    # Examples:
+    # - "Changes to financial calculations (fees, rates, penalties)"
+    # - "Changes to eligibility or approval criteria"
+    # - "Changes to access control or permissions logic"
+
+# Custom rules — evaluated in order; first match wins
+# custom_rules:
+#   - name: "example-escalate"
+#     condition:
+#       file_pattern: "src/**/Payments/**"
+#     action: "escalate"
+#     reason: "Changes to payment processing code"
+#
+#   - name: "example-auto-merge"
+#     condition:
+#       file_pattern: "**/*.md"
+#       max_lines: 50
+#     action: "auto_merge"
+#     reason: "Small documentation change"
+custom_rules: []
