@@ -1,0 +1,24 @@
+name: Factory PR Feedback
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  notify:
+    runs-on: [self-hosted]
+    steps:
+      - name: Forward event to Software Factory
+        env:
+          PAYLOAD: ${{ toJson(github.event) }}
+          FACTORY_URL: ${{ vars.FACTORY_URL }}
+          FACTORY_TOKEN: ${{ secrets.FACTORY_TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          echo "$PAYLOAD" | curl --fail-with-body --show-error -X POST "$FACTORY_URL/webhooks/github" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: $GITHUB_EVENT_NAME" \
+            -H "X-Factory-Token: $FACTORY_TOKEN" \
+            --data-binary @-
