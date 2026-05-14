@@ -1,0 +1,70 @@
+name: "Factory \u2014 Address Review Feedback"
+
+# Triggered automatically when a reviewer requests changes on an agent PR,
+# or manually from the Actions tab to kick off a revision for any agent branch.
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to address"
+        required: true
+        type: number
+      branch:
+        description: "PR branch name (must start with agent/)"
+        required: true
+        type: string
+      feedback:
+        description: "Feedback for the agent to address"
+        required: false
+        default: "Please address the review feedback on this PR."
+
+jobs:
+  request-revision:
+    # Automatic: only changes_requested on agent/ branches
+    # Manual: only agent/ branches (validation on the input)
+    if: |
+      (github.event_name == 'workflow_dispatch' &&
+       startsWith(inputs.branch, 'agent/')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested' &&
+       startsWith(github.event.pull_request.head.ref, 'agent/'))
+    runs-on: [self-hosted]
+    steps:
+      - name: Forward to Factory orchestrator
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.FACTORY_ORCHESTRATOR_URL }}
+          WEBHOOK_SECRET: ${{ secrets.FACTORY_WEBHOOK_SECRET }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Build a synthetic pull_request_review payload for the manual trigger
+            PR_URL="https://github.com/${{ github.repository }}/pull/${{ inputs.pr_number }}"
+            PAYLOAD=$(printf '%s' '{
+              "action": "submitted",
+              "review": {
+                "state": "changes_requested",
+                "body": "${{ inputs.feedback }}",
+                "user": {"login": "${{ github.actor }}"}
+              },
+              "pull_request": {
+                "number": ${{ inputs.pr_number }},
+                "html_url": "'"$PR_URL"'",
+                "head": {"ref": "${{ inputs.branch }}"}
+              },
+              "repository": {"full_name": "${{ github.repository }}"}
+            }')
+          else
+            PAYLOAD=$(cat "$GITHUB_EVENT_PATH")
+          fi
+
+          SIG="sha256=$(printf '%s' "$PAYLOAD" | \
+            openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')"
+
+          curl -sf --max-time 10 \
+            -X POST "$ORCHESTRATOR_URL/webhooks/github" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: pull_request_review" \
+            -H "X-Hub-Signature-256: $SIG" \
+            -d "$PAYLOAD"
+          echo "Revision request sent to Factory"
