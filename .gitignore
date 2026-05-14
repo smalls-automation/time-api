@@ -1,0 +1,17 @@
+# Software Factory
+.factory/checkpoints.db
+.cloned
+
+# Agent runtime artifacts — never commit these
+.dotnet/
+.pi/
+.nuget/
+
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.log
+appsettings.Development.json
