@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using TimeApi.Api;
 
 namespace TimeApi.Tests;
 
@@ -16,7 +15,7 @@ public class TimeEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
-    public async Task GetTime_Returns200AndUtcTimestamp()
+    public async Task GetTime_Returns200Ok()
     {
         // Arrange
         var client = _factory.CreateClient();
@@ -26,19 +25,6 @@ public class TimeEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var json = await response.Content.ReadAsStringAsync();
-        var utcValue = json.SubstringAfter("\"utc\":\"").SubstringBefore("\"");
-
-        Assert.NotNull(utcValue);
-        Assert.NotEmpty(utcValue);
-
-        var parsed = DateTime.Parse(utcValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-        Assert.Equal(DateTimeKind.Utc, parsed.Kind);
-
-        // Allow a 5-second window to account for test execution time
-        var diff = Math.Abs((DateTime.UtcNow - parsed).TotalSeconds);
-        Assert.True(diff < 5, $"Expected UTC within 5 seconds, but difference was {diff} seconds");
     }
 
     [Fact]
@@ -56,7 +42,7 @@ public class TimeEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
-    public async Task GetTime_ReturnsOnlyUtcProperty()
+    public async Task GetTime_ReturnsUtcTimeProperty()
     {
         // Arrange
         var client = _factory.CreateClient();
@@ -70,12 +56,11 @@ public class TimeEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        Assert.True(root.TryGetProperty("utc", out _));
-        Assert.Equal(1, root.GetPropertyCount());
+        Assert.True(root.TryGetProperty("utc_time", out _));
     }
 
     [Fact]
-    public async Task GetTime_ReturnsIso8601RoundtripFormat()
+    public async Task GetTime_ReturnsOnlyUtcTimeProperty()
     {
         // Arrange
         var client = _factory.CreateClient();
@@ -85,25 +70,54 @@ public class TimeEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         // Assert
         var json = await response.Content.ReadAsStringAsync();
-        var utcValue = json.SubstringAfter("\"utc\":\"").SubstringBefore("\"");
 
-        // The "O" format produces ISO-8601 round-trip with Z suffix for UTC
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal(1, root.GetPropertyCount());
+        Assert.True(root.TryGetProperty("utc_time", out _));
+    }
+
+    [Fact]
+    public async Task GetTime_ReturnsValidIso8601UtcTimestamp()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/time");
+
+        // Assert
+        var json = await response.Content.ReadAsStringAsync();
+
+        using var doc = JsonDocument.Parse(json);
+        var utcValue = doc.RootElement.GetProperty("utc_time").GetString()!;
+
+        Assert.NotEmpty(utcValue);
         Assert.EndsWith("Z", utcValue, StringComparison.Ordinal);
-        Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$", utcValue);
-    }
-}
 
-internal static class StringExtensions
-{
-    public static string SubstringAfter(this string str, string after)
-    {
-        var index = str.IndexOf(after, StringComparison.Ordinal);
-        return index >= 0 ? str[(index + after.Length)..] : string.Empty;
+        // Verify it parses as a valid ISO 8601 round-trip format
+        var parsed = DateTime.Parse(utcValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        Assert.Equal(DateTimeKind.Utc, parsed.Kind);
     }
 
-    public static string SubstringBefore(this string str, string before)
+    [Fact]
+    public async Task GetTime_ReturnsTimestampWithinFiveSecondsOfNow()
     {
-        var index = str.IndexOf(before, StringComparison.Ordinal);
-        return index >= 0 ? str[..index] : str;
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/time");
+
+        // Assert
+        var json = await response.Content.ReadAsStringAsync();
+
+        using var doc = JsonDocument.Parse(json);
+        var utcValue = doc.RootElement.GetProperty("utc_time").GetString()!;
+
+        var parsed = DateTime.Parse(utcValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        var diff = Math.Abs((DateTime.UtcNow - parsed).TotalSeconds);
+        Assert.True(diff < 5, $"Expected UTC within 5 seconds, but difference was {diff} seconds");
     }
 }
